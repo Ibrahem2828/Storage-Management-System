@@ -31,6 +31,9 @@ ENV NODE_ENV=production \
     BACKUPS_DIR=/app/backups \
     CORS_ORIGIN=*
 
+
+
+    
 RUN apt-get update \
   && apt-get install -y --no-install-recommends openssl \
   && rm -rf /var/lib/apt/lists/*
