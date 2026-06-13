@@ -2,6 +2,11 @@
   "name": "storage-management-system-backend",
   "version": "0.1.0",
   "private": true,
+  "packageManager": "npm@10.8.2",
+  "engines": {
+    "node": "20.x",
+    "npm": ">=10.8.2 <11"
+  },
   "description": "Phase 1 backend for Storage Management System",
   "scripts": {
     "build": "nest build && npm run build:seed",

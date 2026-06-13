@@ -2,14 +2,15 @@ FROM node:20-bookworm-slim AS builder
 
 WORKDIR /app
 
-ENV NODE_ENV=development
-
 RUN apt-get update \
   && apt-get install -y --no-install-recommends openssl \
   && rm -rf /var/lib/apt/lists/*
 
+RUN npm install --global npm@10.8.2 \
+  && npm --version
+
 COPY package.json package-lock.json ./
-RUN npm ci
+RUN npm ci --include=dev
 
 COPY prisma ./prisma
 RUN npx prisma generate
@@ -23,20 +24,12 @@ FROM node:20-bookworm-slim AS runtime
 
 WORKDIR /app
 
-ENV NODE_ENV=production \
-    PORT=4000 \
-    DATABASE_URL=file:/app/data/SMSdata.db \
-    UPLOADS_DIR=/app/uploads \
-    REPORTS_DIR=/app/reports \
-    BACKUPS_DIR=/app/backups \
-    CORS_ORIGIN=*
-
-
-
-    
 RUN apt-get update \
   && apt-get install -y --no-install-recommends openssl \
   && rm -rf /var/lib/apt/lists/*
+
+RUN npm install --global npm@10.8.2 \
+  && npm --version
 
 COPY package.json package-lock.json ./
 COPY prisma ./prisma
@@ -44,6 +37,14 @@ COPY prisma ./prisma
 RUN npm ci --omit=dev \
   && npx prisma generate \
   && npm cache clean --force
+
+ENV NODE_ENV=production \
+    PORT=4000 \
+    DATABASE_URL=file:/app/data/SMSdata.db \
+    UPLOADS_DIR=/app/uploads \
+    REPORTS_DIR=/app/reports \
+    BACKUPS_DIR=/app/backups \
+    CORS_ORIGIN=*
 
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/dist-seed ./dist-seed

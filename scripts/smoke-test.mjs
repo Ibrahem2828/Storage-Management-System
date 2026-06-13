@@ -71,7 +71,7 @@ async function request(path, options = {}) {
 }
 
 async function waitForServer() {
-  const deadline = Date.now() + 30_000;
+  const deadline = Date.now() + 60_000;
 
   while (Date.now() < deadline) {
     if (serverSpawnError) {
@@ -96,11 +96,20 @@ async function waitForServer() {
     await new Promise((resolveDelay) => setTimeout(resolveDelay, 250));
   }
 
-  throw new Error(`Server did not start within 30 seconds\n${serverOutput}`);
+  throw new Error(`Server did not start within 60 seconds\n${serverOutput}`);
 }
 
 async function stopServer() {
   if (!server || server.exitCode !== null) {
+    return;
+  }
+
+  if (process.platform === "win32" && server.pid) {
+    spawnSync("taskkill", ["/PID", String(server.pid), "/T", "/F"], {
+      stdio: "ignore",
+      windowsHide: true,
+    });
+    await new Promise((resolveDelay) => setTimeout(resolveDelay, 500));
     return;
   }
 
@@ -119,7 +128,11 @@ async function stopServer() {
 
 async function removeSmokeArtifacts() {
   for (const suffix of ["", "-journal", "-shm", "-wal"]) {
-    await rm(`${databasePath}${suffix}`, { force: true });
+    await rm(`${databasePath}${suffix}`, {
+      force: true,
+      maxRetries: 5,
+      retryDelay: 200,
+    });
   }
 
   if (uploadedImagePath) {
@@ -127,7 +140,11 @@ async function removeSmokeArtifacts() {
     const imagePath = resolve(projectRoot, uploadedImagePath);
 
     if (imagePath.startsWith(`${uploadsDirectory}${sep}`)) {
-      await rm(imagePath, { force: true });
+      await rm(imagePath, {
+        force: true,
+        maxRetries: 5,
+        retryDelay: 200,
+      });
     }
   }
 }

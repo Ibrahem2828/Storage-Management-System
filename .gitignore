@@ -5,8 +5,11 @@ dist-seed/
 .env.*
 !.env.example
 data/*.db
+data/*.db-*
 data/*.sqlite
+data/*.sqlite-*
 data/*.sqlite3
+data/*.sqlite3-*
 uploads/
 reports/
 backups/
