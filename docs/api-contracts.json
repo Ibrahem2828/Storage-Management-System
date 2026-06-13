@@ -1,0 +1,458 @@
+{
+  "name": "Storage Management System API",
+  "version": "1.0.0",
+  "baseUrl": "http://localhost:4000/api",
+  "auth": {
+    "type": "Bearer Token",
+    "requiredHeader": {
+      "Authorization": "Bearer <accessToken>"
+    },
+    "publicEndpoints": ["GET /", "GET /health", "POST /auth/login"],
+    "protectedEndpoints": [
+      "GET /auth/me",
+      "POST /devices",
+      "GET /devices",
+      "GET /devices/:id",
+      "PATCH /devices/:id",
+      "POST /devices/:id/image",
+      "POST /devices/:deviceId/serials",
+      "GET /devices/:deviceId/serials",
+      "GET /devices/:id/assignments",
+      "POST /assignments",
+      "GET /assignments",
+      "GET /assignments/:id",
+      "POST /assignments/:id/return",
+      "GET /dashboard/summary",
+      "GET /dashboard/recent-assignments"
+    ]
+  },
+  "responseFormat": {
+    "success": {
+      "success": true,
+      "message": "Operation completed successfully",
+      "data": {}
+    }
+  },
+  "errorExamples": {
+    "unauthorized": {
+      "statusCode": 401,
+      "message": "Unauthorized"
+    },
+    "validation": {
+      "message": ["name should not be empty"],
+      "error": "Bad Request",
+      "statusCode": 400
+    },
+    "notFound": {
+      "message": "Device with ID 999 was not found",
+      "error": "Not Found",
+      "statusCode": 404
+    },
+    "conflict": {
+      "message": "Device item is not available for assignment",
+      "error": "Conflict",
+      "statusCode": 409
+    }
+  },
+  "endpoints": [
+    {
+      "method": "GET",
+      "path": "/",
+      "authRequired": false,
+      "response": {
+        "success": true,
+        "message": "Storage Management System API is running",
+        "data": {
+          "name": "Storage Management System",
+          "status": "ok",
+          "version": "1.0.0"
+        }
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/health",
+      "authRequired": false,
+      "response": {
+        "success": true,
+        "message": "Backend health check passed",
+        "data": {
+          "status": "ok",
+          "database": "connected",
+          "timestamp": "2026-06-10T10:00:00.000Z"
+        }
+      },
+      "error": {
+        "message": "Backend health check failed: database is not connected",
+        "error": "Internal Server Error",
+        "statusCode": 500
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/auth/login",
+      "authRequired": false,
+      "request": {
+        "contentType": "application/json",
+        "body": {
+          "username": "admin",
+          "password": "admin123"
+        }
+      },
+      "response": {
+        "success": true,
+        "message": "Login successful",
+        "data": {
+          "accessToken": "jwt-token",
+          "user": {
+            "id": 1,
+            "name": "Warehouse Manager",
+            "username": "admin"
+          }
+        }
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/auth/me",
+      "authRequired": true,
+      "response": {
+        "success": true,
+        "message": "Current user retrieved successfully",
+        "data": {
+          "id": 1,
+          "name": "Warehouse Manager",
+          "username": "admin",
+          "createdAt": "2026-06-10T10:00:00.000Z",
+          "updatedAt": "2026-06-10T10:00:00.000Z"
+        }
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/devices",
+      "authRequired": true,
+      "request": {
+        "contentType": "application/json",
+        "body": {
+          "name": "Laptop Dell",
+          "details": "Dell laptop device"
+        }
+      },
+      "response": {
+        "success": true,
+        "message": "Device created successfully",
+        "data": {
+          "id": 1,
+          "name": "Laptop Dell",
+          "details": "Dell laptop device",
+          "imagePath": null,
+          "itemsCount": 0,
+          "items": []
+        }
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/devices",
+      "authRequired": true,
+      "response": {
+        "success": true,
+        "message": "Devices retrieved successfully",
+        "data": [
+          {
+            "id": 1,
+            "name": "Laptop Dell",
+            "details": "Dell laptop device",
+            "imagePath": "uploads/devices/example.jpg",
+            "itemsCount": 1,
+            "items": [
+              {
+                "id": 1,
+                "deviceId": 1,
+                "serialNumber": "SN-001",
+                "status": "AVAILABLE"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/devices/:id",
+      "authRequired": true,
+      "response": {
+        "success": true,
+        "message": "Device retrieved successfully",
+        "data": {
+          "id": 1,
+          "name": "Laptop Dell",
+          "details": "Dell laptop device",
+          "imagePath": "uploads/devices/example.jpg",
+          "itemsCount": 1,
+          "items": [
+            {
+              "id": 1,
+              "deviceId": 1,
+              "serialNumber": "SN-001",
+              "status": "ASSIGNED",
+              "latestActiveAssignment": {
+                "id": 1,
+                "status": "ACTIVE",
+                "receivedBy": "Ahmed Ali",
+                "assignedAt": "2026-06-10T10:00:00.000Z",
+                "returnedAt": null,
+                "notes": "Delivered to employee",
+                "returnNotes": null
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "method": "PATCH",
+      "path": "/devices/:id",
+      "authRequired": true,
+      "request": {
+        "contentType": "application/json",
+        "body": {
+          "name": "Laptop Dell 7420",
+          "details": "Updated details"
+        }
+      },
+      "response": {
+        "success": true,
+        "message": "Device updated successfully",
+        "data": {
+          "id": 1,
+          "name": "Laptop Dell 7420",
+          "details": "Updated details"
+        }
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/devices/:id/image",
+      "authRequired": true,
+      "request": {
+        "contentType": "multipart/form-data",
+        "fields": {
+          "image": "image file"
+        }
+      },
+      "response": {
+        "success": true,
+        "message": "Device image uploaded successfully",
+        "data": {
+          "id": 1,
+          "imagePath": "uploads/devices/example.jpg"
+        }
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/devices/:id/serials",
+      "authRequired": true,
+      "request": {
+        "contentType": "application/json",
+        "body": {
+          "serialNumbers": ["SN-001", "SN-002"]
+        }
+      },
+      "response": {
+        "success": true,
+        "message": "Serial numbers added successfully",
+        "data": [
+          {
+            "id": 1,
+            "deviceId": 1,
+            "serialNumber": "SN-001",
+            "status": "AVAILABLE"
+          }
+        ]
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/devices/:id/serials",
+      "authRequired": true,
+      "response": {
+        "success": true,
+        "message": "Serial numbers retrieved successfully",
+        "data": [
+          {
+            "id": 1,
+            "deviceId": 1,
+            "serialNumber": "SN-001",
+            "status": "AVAILABLE",
+            "createdAt": "2026-06-10T10:00:00.000Z",
+            "updatedAt": "2026-06-10T10:00:00.000Z"
+          }
+        ]
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/devices/:id/assignments",
+      "authRequired": true,
+      "response": {
+        "success": true,
+        "message": "Device assignment history retrieved successfully",
+        "data": {
+          "device": {
+            "id": 1,
+            "name": "Laptop Dell",
+            "imagePath": "uploads/devices/example.jpg"
+          },
+          "deviceItems": [
+            {
+              "id": 1,
+              "serialNumber": "SN-001",
+              "status": "ASSIGNED",
+              "assignments": [
+                {
+                  "id": 1,
+                  "status": "ACTIVE",
+                  "receivedBy": "Ahmed Ali",
+                  "assignedAt": "2026-06-10T10:00:00.000Z",
+                  "returnedAt": null
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/assignments",
+      "authRequired": true,
+      "request": {
+        "contentType": "application/json",
+        "body": {
+          "deviceItemId": 1,
+          "receivedBy": "Ahmed Ali",
+          "notes": "Delivered to employee"
+        }
+      },
+      "response": {
+        "success": true,
+        "message": "Device assigned successfully",
+        "data": {
+          "id": 1,
+          "status": "ACTIVE",
+          "receivedBy": "Ahmed Ali",
+          "assignedAt": "2026-06-10T10:00:00.000Z",
+          "returnedAt": null,
+          "notes": "Delivered to employee",
+          "returnNotes": null,
+          "deviceItem": {
+            "id": 1,
+            "serialNumber": "SN-001",
+            "status": "ASSIGNED",
+            "device": {
+              "id": 1,
+              "name": "Laptop Dell",
+              "imagePath": "uploads/devices/example.jpg"
+            }
+          }
+        }
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/assignments",
+      "authRequired": true,
+      "query": {
+        "status": "optional ACTIVE or RETURNED"
+      },
+      "response": {
+        "success": true,
+        "message": "Assignments retrieved successfully",
+        "data": []
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/assignments/:id",
+      "authRequired": true,
+      "response": {
+        "success": true,
+        "message": "Assignment retrieved successfully",
+        "data": {
+          "id": 1,
+          "status": "ACTIVE",
+          "receivedBy": "Ahmed Ali"
+        }
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/assignments/:id/return",
+      "authRequired": true,
+      "request": {
+        "contentType": "application/json",
+        "body": {
+          "returnNotes": "Returned in good condition"
+        }
+      },
+      "response": {
+        "success": true,
+        "message": "Device returned successfully",
+        "data": {
+          "id": 1,
+          "status": "RETURNED",
+          "returnedAt": "2026-06-10T12:00:00.000Z",
+          "returnNotes": "Returned in good condition"
+        }
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/dashboard/summary",
+      "authRequired": true,
+      "response": {
+        "success": true,
+        "message": "Dashboard summary loaded successfully",
+        "data": {
+          "devicesCount": 10,
+          "deviceItemsCount": 25,
+          "availableItemsCount": 18,
+          "assignedItemsCount": 7,
+          "activeAssignmentsCount": 7,
+          "returnedAssignmentsCount": 12
+        }
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/dashboard/recent-assignments",
+      "authRequired": true,
+      "response": {
+        "success": true,
+        "message": "Recent assignments loaded successfully",
+        "data": [
+          {
+            "id": 1,
+            "status": "ACTIVE",
+            "receivedBy": "Ahmed Ali",
+            "assignedAt": "2026-06-10T10:00:00.000Z",
+            "returnedAt": null,
+            "deviceItem": {
+              "id": 1,
+              "serialNumber": "SN-001",
+              "status": "ASSIGNED",
+              "device": {
+                "id": 1,
+                "name": "Laptop Dell",
+                "imagePath": "uploads/devices/example.jpg"
+              }
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

@@ -1,0 +1,58 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           Int      @id @default(autoincrement())
+  name         String
+  username     String   @unique
+  passwordHash String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model Device {
+  id        Int          @id @default(autoincrement())
+  name      String
+  details   String?
+  imagePath String?
+  items     DeviceItem[]
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+}
+
+model DeviceItem {
+  id           Int              @id @default(autoincrement())
+  deviceId     Int
+  serialNumber String           @unique
+  status       String           @default("AVAILABLE")
+  device       Device           @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  assignments  Assignment[]
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  @@index([deviceId])
+}
+
+model Assignment {
+  id           Int        @id @default(autoincrement())
+  deviceItemId Int
+  receivedBy   String
+  assignedAt   DateTime   @default(now())
+  returnedAt   DateTime?
+  status       String     @default("ACTIVE")
+  notes        String?
+  returnNotes  String?
+  deviceItem   DeviceItem @relation(fields: [deviceItemId], references: [id], onDelete: Cascade)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  @@index([deviceItemId])
+  @@index([status])
+  @@index([assignedAt])
+}

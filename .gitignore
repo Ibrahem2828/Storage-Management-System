@@ -1,0 +1,15 @@
+node_modules/
+dist/
+dist-seed/
+.env
+.env.*
+!.env.example
+data/*.db
+data/*.sqlite
+data/*.sqlite3
+uploads/
+reports/
+backups/
+*.log
+coverage/
+.cache/
