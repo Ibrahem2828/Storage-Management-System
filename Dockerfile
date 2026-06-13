@@ -20,6 +20,8 @@ COPY src ./src
 
 RUN npm run build
 
+
+
 FROM node:20-bookworm-slim AS runtime
 
 WORKDIR /app
