@@ -1,30 +1,8 @@
 import { Injectable } from "@nestjs/common";
-import { Prisma } from "@prisma/client";
 import { ASSIGNMENT_STATUS } from "../assignments/assignment-status";
+import { DatabaseService } from "../common/database/database.service";
+import { toIsoTimestamp } from "../common/database/database.utils";
 import { DEVICE_ITEM_STATUS } from "../device-items/device-item-status";
-import { PrismaService } from "../prisma/prisma.service";
-
-const recentAssignmentSelect = {
-  id: true,
-  status: true,
-  receivedBy: true,
-  assignedAt: true,
-  returnedAt: true,
-  deviceItem: {
-    select: {
-      id: true,
-      serialNumber: true,
-      status: true,
-      device: {
-        select: {
-          id: true,
-          name: true,
-          imagePath: true,
-        },
-      },
-    },
-  },
-} satisfies Prisma.AssignmentSelect;
 
 export interface DashboardSummary {
   devicesCount: number;
@@ -35,64 +13,108 @@ export interface DashboardSummary {
   returnedAssignmentsCount: number;
 }
 
-export type RecentAssignmentResponse = Prisma.AssignmentGetPayload<{
-  select: typeof recentAssignmentSelect;
-}>;
+interface RecentAssignmentRow {
+  id: number;
+  status: string;
+  receivedBy: string;
+  assignedAt: string;
+  returnedAt: string | null;
+  itemId: number;
+  serialNumber: string;
+  itemStatus: string;
+  deviceId: number;
+  deviceName: string;
+  deviceImagePath: string | null;
+}
+
+export interface RecentAssignmentResponse {
+  id: number;
+  status: string;
+  receivedBy: string;
+  assignedAt: string;
+  returnedAt: string | null;
+  deviceItem: {
+    id: number;
+    serialNumber: string;
+    status: string;
+    device: {
+      id: number;
+      name: string;
+      imagePath: string | null;
+    };
+  };
+}
 
 @Injectable()
 export class DashboardService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly database: DatabaseService) {}
 
-  async getSummary(): Promise<DashboardSummary> {
-    const [
-      devicesCount,
-      deviceItemsCount,
-      availableItemsCount,
-      assignedItemsCount,
-      activeAssignmentsCount,
-      returnedAssignmentsCount,
-    ] = await this.prisma.$transaction([
-      this.prisma.device.count(),
-      this.prisma.deviceItem.count(),
-      this.prisma.deviceItem.count({
-        where: {
-          status: DEVICE_ITEM_STATUS.AVAILABLE,
-        },
-      }),
-      this.prisma.deviceItem.count({
-        where: {
-          status: DEVICE_ITEM_STATUS.ASSIGNED,
-        },
-      }),
-      this.prisma.assignment.count({
-        where: {
-          status: ASSIGNMENT_STATUS.ACTIVE,
-        },
-      }),
-      this.prisma.assignment.count({
-        where: {
-          status: ASSIGNMENT_STATUS.RETURNED,
-        },
-      }),
-    ]);
+  getSummary(): DashboardSummary {
+    const summary = this.database.get<DashboardSummary>(
+      `SELECT
+         (SELECT COUNT(*) FROM devices) AS devicesCount,
+         (SELECT COUNT(*) FROM device_items) AS deviceItemsCount,
+         (SELECT COUNT(*) FROM device_items WHERE status = ?) AS availableItemsCount,
+         (SELECT COUNT(*) FROM device_items WHERE status = ?) AS assignedItemsCount,
+         (SELECT COUNT(*) FROM assignments WHERE status = ?) AS activeAssignmentsCount,
+         (SELECT COUNT(*) FROM assignments WHERE status = ?) AS returnedAssignmentsCount`,
+      [
+        DEVICE_ITEM_STATUS.AVAILABLE,
+        DEVICE_ITEM_STATUS.ASSIGNED,
+        ASSIGNMENT_STATUS.ACTIVE,
+        ASSIGNMENT_STATUS.RETURNED,
+      ],
+    );
 
-    return {
-      devicesCount,
-      deviceItemsCount,
-      availableItemsCount,
-      assignedItemsCount,
-      activeAssignmentsCount,
-      returnedAssignmentsCount,
-    };
+    return (
+      summary ?? {
+        devicesCount: 0,
+        deviceItemsCount: 0,
+        availableItemsCount: 0,
+        assignedItemsCount: 0,
+        activeAssignmentsCount: 0,
+        returnedAssignmentsCount: 0,
+      }
+    );
   }
 
-  getRecentAssignments(): Promise<RecentAssignmentResponse[]> {
-    return this.prisma.assignment.findMany({
-      orderBy: {
-        assignedAt: "desc",
-      },
-      take: 10,
-      select: recentAssignmentSelect,
-    });
+  getRecentAssignments(): RecentAssignmentResponse[] {
+    return this.database
+      .all<RecentAssignmentRow>(
+        `SELECT
+           a.id,
+           a.status,
+           a.received_by AS receivedBy,
+           a.assigned_at AS assignedAt,
+           a.returned_at AS returnedAt,
+           di.id AS itemId,
+           di.serial_number AS serialNumber,
+           di.status AS itemStatus,
+           d.id AS deviceId,
+           d.name AS deviceName,
+           d.image_path AS deviceImagePath
+         FROM assignments a
+         INNER JOIN device_items di ON di.id = a.device_item_id
+         INNER JOIN devices d ON d.id = di.device_id
+         ORDER BY a.assigned_at DESC, a.id DESC
+         LIMIT 10`,
+      )
+      .map((row) => ({
+        id: row.id,
+        status: row.status,
+        receivedBy: row.receivedBy,
+        assignedAt: toIsoTimestamp(row.assignedAt),
+        returnedAt: row.returnedAt ? toIsoTimestamp(row.returnedAt) : null,
+        deviceItem: {
+          id: row.itemId,
+          serialNumber: row.serialNumber,
+          status: row.itemStatus,
+          device: {
+            id: row.deviceId,
+            name: row.deviceName,
+            imagePath: row.deviceImagePath,
+          },
+        },
+      }));
   }
 }

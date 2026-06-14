@@ -2,10 +2,10 @@ import { Module, OnApplicationBootstrap } from "@nestjs/common";
 import { ConfigModule } from "@nestjs/config";
 import { AssignmentsModule } from "./assignments/assignments.module";
 import { AuthModule } from "./auth/auth.module";
+import { DatabaseModule } from "./common/database/database.module";
 import { DashboardModule } from "./dashboard/dashboard.module";
 import { DevicesModule } from "./devices/devices.module";
 import { DeviceItemsModule } from "./device-items/device-items.module";
-import { PrismaModule } from "./prisma/prisma.module";
 import { UsersModule } from "./users/users.module";
 import { UsersService } from "./users/users.service";
 import { AppController } from "./app.controller";
@@ -16,7 +16,7 @@ import { AppService } from "./app.service";
     ConfigModule.forRoot({
       isGlobal: true,
     }),
-    PrismaModule,
+    DatabaseModule,
     UsersModule,
     AuthModule,
     DevicesModule,

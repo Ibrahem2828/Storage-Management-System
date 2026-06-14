@@ -3,93 +3,101 @@ import {
   ConflictException,
   Injectable,
 } from "@nestjs/common";
-import { Prisma } from "@prisma/client";
-import { PrismaService } from "../prisma/prisma.service";
+import { DatabaseService } from "../common/database/database.service";
+import {
+  isSqliteConstraintError,
+  toIsoTimestamp,
+} from "../common/database/database.utils";
 import { DevicesService } from "../devices/devices.service";
 import { DEVICE_ITEM_STATUS } from "./device-item-status";
+import { DeviceItemResponse } from "./device-item.types";
 
-const deviceItemSelect = {
-  id: true,
-  deviceId: true,
-  serialNumber: true,
-  status: true,
-  createdAt: true,
-  updatedAt: true,
-} satisfies Prisma.DeviceItemSelect;
+interface DeviceItemRow {
+  id: number;
+  deviceId: number;
+  serialNumber: string;
+  status: string;
+  createdAt: string;
+  updatedAt: string;
+}
 
-export type DeviceItemResponse = Prisma.DeviceItemGetPayload<{
-  select: typeof deviceItemSelect;
-}>;
+const deviceItemSelect = `
+  SELECT
+    id,
+    device_id AS deviceId,
+    serial_number AS serialNumber,
+    status,
+    created_at AS createdAt,
+    updated_at AS updatedAt
+  FROM device_items
+`;
 
 @Injectable()
 export class DeviceItemsService {
   constructor(
-    private readonly prisma: PrismaService,
+    private readonly database: DatabaseService,
     private readonly devicesService: DevicesService,
   ) {}
 
-  async addSerialNumbers(
+  addSerialNumbers(
     deviceId: number,
     serialNumbers: string[],
-  ): Promise<DeviceItemResponse[]> {
-    await this.devicesService.ensureExists(deviceId);
+  ): DeviceItemResponse[] {
+    this.devicesService.ensureExists(deviceId);
 
     const normalizedSerialNumbers = serialNumbers.map((serialNumber) =>
       serialNumber.trim(),
     );
 
-    const emptySerialsExist = normalizedSerialNumbers.some(
-      (serialNumber) => serialNumber.length === 0,
-    );
-
-    if (emptySerialsExist) {
+    if (normalizedSerialNumbers.some((serialNumber) => !serialNumber)) {
       throw new BadRequestException("Serial numbers cannot be empty");
     }
 
-    const uniqueSerialNumbers = new Set(normalizedSerialNumbers);
-
-    if (uniqueSerialNumbers.size !== normalizedSerialNumbers.length) {
+    if (
+      new Set(normalizedSerialNumbers).size !== normalizedSerialNumbers.length
+    ) {
       throw new BadRequestException(
         "Duplicate serial numbers are not allowed in the request body",
       );
     }
 
-    const existingSerials = await this.prisma.deviceItem.findMany({
-      where: {
-        serialNumber: {
-          in: normalizedSerialNumbers,
-        },
-      },
-      select: {
-        serialNumber: true,
-      },
-    });
+    const placeholders = normalizedSerialNumbers.map(() => "?").join(", ");
+    const existingSerials = this.database.all<{ serialNumber: string }>(
+      `SELECT serial_number AS serialNumber
+       FROM device_items
+       WHERE serial_number IN (${placeholders})`,
+      normalizedSerialNumbers,
+    );
 
     if (existingSerials.length > 0) {
-      throw new ConflictException({
-        message: "Some serial numbers already exist",
-        serialNumbers: existingSerials.map((item) => item.serialNumber),
-      });
+      throw new ConflictException("Some serial numbers already exist");
     }
 
     try {
-      return await this.prisma.$transaction(
-        normalizedSerialNumbers.map((serialNumber) =>
-          this.prisma.deviceItem.create({
-            data: {
-              deviceId,
-              serialNumber,
-              status: DEVICE_ITEM_STATUS.AVAILABLE,
-            },
-            select: deviceItemSelect,
-          }),
-        ),
-      );
+      return this.database.transaction(() => {
+        const createdIds = normalizedSerialNumbers.map((serialNumber) => {
+          const result = this.database.run(
+            `INSERT INTO device_items (device_id, serial_number, status)
+             VALUES (?, ?, ?)`,
+            [deviceId, serialNumber, DEVICE_ITEM_STATUS.AVAILABLE],
+          );
+
+          return Number(result.lastInsertRowid);
+        });
+
+        const createdPlaceholders = createdIds.map(() => "?").join(", ");
+
+        return this.database
+          .all<DeviceItemRow>(
+            `${deviceItemSelect}
+             WHERE id IN (${createdPlaceholders})
+             ORDER BY created_at DESC, id DESC`,
+            createdIds,
+          )
+          .map((row) => this.toDeviceItem(row));
+      });
     } catch (error) {
-      if (
-        error instanceof Prisma.PrismaClientKnownRequestError &&
-        error.code === "P2002"
-      ) {
+      if (isSqliteConstraintError(error)) {
         throw new ConflictException("One or more serial numbers already exist");
       }
 
@@ -97,17 +105,24 @@ export class DeviceItemsService {
     }
   }
 
-  async findForDevice(deviceId: number): Promise<DeviceItemResponse[]> {
-    await this.devicesService.ensureExists(deviceId);
+  findForDevice(deviceId: number): DeviceItemResponse[] {
+    this.devicesService.ensureExists(deviceId);
 
-    return this.prisma.deviceItem.findMany({
-      where: {
-        deviceId,
-      },
-      orderBy: {
-        createdAt: "desc",
-      },
-      select: deviceItemSelect,
-    });
+    return this.database
+      .all<DeviceItemRow>(
+        `${deviceItemSelect}
+         WHERE device_id = ?
+         ORDER BY created_at DESC, id DESC`,
+        [deviceId],
+      )
+      .map((row) => this.toDeviceItem(row));
+  }
+
+  private toDeviceItem(row: DeviceItemRow): DeviceItemResponse {
+    return {
+      ...row,
+      createdAt: toIsoTimestamp(row.createdAt),
+      updatedAt: toIsoTimestamp(row.updatedAt),
+    };
   }
 }

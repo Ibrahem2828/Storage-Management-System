@@ -3,6 +3,7 @@ import { ConfigService } from "@nestjs/config";
 import { NestFactory } from "@nestjs/core";
 import { NestExpressApplication } from "@nestjs/platform-express";
 import { AppModule } from "./app.module";
+import { AllExceptionsFilter } from "./common/filters/all-exceptions.filter";
 import { UploadsService } from "./uploads/uploads.service";
 
 async function bootstrap(): Promise<void> {
@@ -30,6 +31,7 @@ async function bootstrap(): Promise<void> {
       forbidNonWhitelisted: true,
     }),
   );
+  app.useGlobalFilters(new AllExceptionsFilter());
 
   const port = configService.get<number>("PORT", 4000);
   await app.listen(port, "0.0.0.0");

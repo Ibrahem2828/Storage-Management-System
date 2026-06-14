@@ -1,25 +1,114 @@
 # Storage Management System Backend
 
-NestJS REST API for the mobile Storage Management System. The deployment stack is NestJS, Prisma, SQLite, Docker, and persistent storage. There is no web dashboard frontend.
+NestJS REST API for the Storage Management System mobile app. It manages device types, physical serialized items, assignments, returns, image uploads, and mobile Home summary data.
 
-## Runtime
+## Tech Stack
 
-- API prefix: `/api`
-- Static uploads: `/uploads/*`
-- Container port: `4000`
-- Container working directory: `/app`
-- SQLite database: `/app/data/SMSdata.db`
-- Replicas: `1`
+- NestJS and TypeScript
+- SQLite through `better-sqlite3`
+- JWT authentication
+- Multer image uploads
+- Docker for Coolify deployment
 
-The entrypoint creates the storage directories, applies committed Prisma migrations, runs the idempotent admin seed, and starts NestJS on `0.0.0.0:4000`.
+Prisma was removed to eliminate generated clients, engine downloads, migration tooling, and deployment lockfile complexity. The backend now owns one direct SQLite connection through `DatabaseService` and initializes an idempotent SQL schema at startup.
 
-## Coolify Settings
+## Local Setup
 
-The backend files are currently at the Git repository root. Use:
+```sh
+npm install
+```
+
+Create an untracked `.env` based on `.env.example`:
+
+```env
+APP_NAME="Storage Management System"
+NODE_ENV="development"
+PORT=4000
+DATABASE_PATH="./data/storage.sqlite"
+JWT_SECRET="local-dev-secret"
+JWT_EXPIRES_IN="1d"
+UPLOADS_DIR="./uploads"
+CORS_ORIGIN="*"
+```
+
+Initialize or seed manually when needed:
+
+```sh
+npm run db:init
+npm run seed
+```
+
+Start development mode:
+
+```sh
+npm run start:dev
+```
+
+The application also runs the schema and safely creates the default admin during startup.
+
+## Storage
+
+- Local database: `./data/storage.sqlite`
+- Local uploads: `./uploads`
+- Container database: `/app/data/storage.sqlite`
+- Container uploads: `/app/uploads`
+
+The database schema is defined in `database/schema.sql`. Local database files and uploads are ignored by Git and Docker.
+
+Default test account:
 
 ```txt
-Resource Type: Application
-Source: Git Repository
+username: admin
+password: admin123
+```
+
+Change the default password and use a long random JWT secret before real production use.
+
+## API
+
+Public endpoints:
+
+```txt
+GET  /api
+GET  /api/health
+POST /api/auth/login
+```
+
+JWT-protected endpoints:
+
+```txt
+GET   /api/auth/me
+POST  /api/devices
+GET   /api/devices
+GET   /api/devices/:id
+PATCH /api/devices/:id
+POST  /api/devices/:id/image
+POST  /api/devices/:deviceId/serials
+GET   /api/devices/:deviceId/serials
+GET   /api/devices/:id/assignments
+POST  /api/assignments
+GET   /api/assignments
+GET   /api/assignments/:id
+POST  /api/assignments/:id/return
+GET   /api/dashboard/summary
+GET   /api/dashboard/recent-assignments
+```
+
+Use `Authorization: Bearer <accessToken>` for protected endpoints. Uploaded images are publicly available under `/uploads/*`, outside the `/api` prefix.
+
+## Validation
+
+```sh
+npm run build
+npm run seed
+npm run smoke
+```
+
+The smoke test uses an isolated temporary SQLite file, performs real HTTP requests for the complete assignment and return flow, and removes its database, uploaded image, and server process afterward.
+
+## Coolify Test Deployment
+
+```txt
 Build Pack: Dockerfile
 Base Directory: /
 Dockerfile Location: /Dockerfile
@@ -28,53 +117,36 @@ Protocol: HTTP
 Replicas: 1
 ```
 
-Leaving Base Directory blank and using `Dockerfile` is equivalent in Coolify. Do not set Base Directory to `/Backend` for the current repository layout. If the repository is later converted to a monorepo with a tracked `Backend/` folder, use Base Directory `/Backend` and Dockerfile Location `/Dockerfile`.
-
-Use Dockerfile mode, not Nixpacks. After changing the Dockerfile or lockfile, redeploy the latest commit with build cache disabled once. Confirm the deployment commit SHA matches `origin/main`.
-
-## Environment Variables
-
-Configure these as runtime environment variables in Coolify:
+Environment variables:
 
 ```env
 APP_NAME="Storage Management System"
 NODE_ENV="production"
 PORT=4000
-DATABASE_URL="file:/app/data/SMSdata.db"
+DATABASE_PATH="/app/data/storage.sqlite"
 JWT_SECRET="CHANGE_ME_TO_LONG_RANDOM_SECRET"
 JWT_EXPIRES_IN="1d"
 UPLOADS_DIR="/app/uploads"
-REPORTS_DIR="/app/reports"
-BACKUPS_DIR="/app/backups"
 CORS_ORIGIN="*"
 ```
 
-Replace `JWT_SECRET` with a long random value. Do not commit or upload the local `.env` file.
-
-`NODE_ENV=production` is a runtime setting. The Docker builder explicitly installs development dependencies with `npm ci --include=dev`, and the runtime stage installs production dependencies with `npm ci --omit=dev` before setting `NODE_ENV=production`.
-
-For local development, use this database URL in the untracked `.env` file:
-
-```env
-DATABASE_URL="file:../data/SMSdata.db"
-```
-
-## Persistent Storage
-
-Configure persistent mounts for:
+Required persistent mounts:
 
 ```txt
 /app/data
 /app/uploads
+```
+
+Optional mounts retained for future report and backup files:
+
+```txt
 /app/reports
 /app/backups
 ```
 
-The minimum required mounts for testing are `/app/data` and `/app/uploads`. Keep `Replicas = 1`; SQLite must not have multiple application replicas writing to the same database.
+Keep one replica because SQLite supports one writing application instance for this deployment model.
 
-## Test URLs
-
-With a Coolify HTTP domain:
+Test URLs:
 
 ```txt
 http://YOUR_DOMAIN/api
@@ -82,59 +154,4 @@ http://YOUR_DOMAIN/api/health
 http://YOUR_DOMAIN/uploads/devices/IMAGE_FILE.jpg
 ```
 
-With a directly exposed server port:
-
-```txt
-http://YOUR_SERVER_IP:4000/api
-http://YOUR_SERVER_IP:4000/api/health
-```
-
-Login request:
-
-```http
-POST http://YOUR_DOMAIN/api/auth/login
-Content-Type: application/json
-
-{
-  "username": "admin",
-  "password": "admin123"
-}
-```
-
-## Mobile App
-
-Set the mobile app Server Settings URL to:
-
-```txt
-http://YOUR_DOMAIN/api
-```
-
-or:
-
-```txt
-http://YOUR_SERVER_IP:4000/api
-```
-
-HTTP is allowed for the current test deployment only. Add HTTPS before real production use. If an Android APK blocks HTTP, enable cleartext traffic in the mobile app configuration for this test stage.
-
-## Dependency Reproducibility
-
-The project and Dockerfile use Node 20 and npm 10.8.2. Keep `package.json` and `package-lock.json` in the same commit.
-
-```sh
-npx npm@10.8.2 install --package-lock-only
-npx npm@10.8.2 ci
-npm run build
-npx prisma generate
-npx npm@10.8.2 ci --omit=dev
-```
-
-The Dockerfile retains deterministic `npm ci` installs. If Coolify reports AJV lockfile mismatches while these commands pass on the same commit, Coolify is using an old commit, stale build context, or stale cache. Verify the commit SHA and perform one no-cache redeploy.
-
-## Docker
-
-```sh
-docker build --no-cache -t sms-backend-coolify-test .
-```
-
-The image excludes local databases, uploads, reports, backups, `.env` files, logs, and development dependencies from the final runtime stage.
+Set the mobile app server URL to `http://YOUR_DOMAIN/api`. HTTP is allowed only for this test deployment. Add HTTPS for real production; Android builds may require cleartext traffic to be explicitly enabled while testing HTTP.

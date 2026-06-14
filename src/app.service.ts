@@ -1,6 +1,6 @@
 import { Injectable, InternalServerErrorException } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import { PrismaService } from "./prisma/prisma.service";
+import { DatabaseService } from "./common/database/database.service";
 
 export interface ApiRootStatus {
   name: string;
@@ -18,7 +18,7 @@ export interface HealthStatus {
 export class AppService {
   constructor(
     private readonly configService: ConfigService,
-    private readonly prisma: PrismaService,
+    private readonly database: DatabaseService,
   ) {}
 
   getRootStatus(): ApiRootStatus {
@@ -34,7 +34,7 @@ export class AppService {
 
   async getHealthStatus(): Promise<HealthStatus> {
     try {
-      await this.prisma.$queryRaw`SELECT 1`;
+      this.database.ping();
     } catch {
       throw new InternalServerErrorException(
         "Backend health check failed: database is not connected",

@@ -4,9 +4,12 @@
     "declaration": false,
     "incremental": false,
     "noEmitOnError": true,
-    "outDir": "./dist-seed",
+    "outDir": "./dist-database",
     "rootDir": ".",
     "sourceMap": false
   },
-  "include": ["prisma/seed.ts"]
+  "include": [
+    "database/**/*.ts",
+    "src/common/database/database.utils.ts"
+  ]
 }

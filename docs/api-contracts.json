@@ -35,22 +35,23 @@
   },
   "errorExamples": {
     "unauthorized": {
-      "statusCode": 401,
-      "message": "Unauthorized"
+      "success": false,
+      "message": "Unauthorized",
+      "statusCode": 401
     },
     "validation": {
-      "message": ["name should not be empty"],
-      "error": "Bad Request",
+      "success": false,
+      "message": "name should not be empty",
       "statusCode": 400
     },
     "notFound": {
+      "success": false,
       "message": "Device with ID 999 was not found",
-      "error": "Not Found",
       "statusCode": 404
     },
     "conflict": {
+      "success": false,
       "message": "Device item is not available for assignment",
-      "error": "Conflict",
       "statusCode": 409
     }
   },

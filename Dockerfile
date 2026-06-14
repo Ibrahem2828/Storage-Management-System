@@ -3,53 +3,37 @@ FROM node:20-bookworm-slim AS builder
 WORKDIR /app
 
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends openssl \
+  && apt-get install -y --no-install-recommends python3 make g++ \
   && rm -rf /var/lib/apt/lists/*
 
-RUN npm install --global npm@10.8.2 \
-  && npm --version
+RUN npm install --global npm@10.8.2
 
 COPY package.json package-lock.json ./
 RUN npm ci --include=dev
 
-COPY prisma ./prisma
-RUN npx prisma generate
-
-COPY nest-cli.json tsconfig.json tsconfig.build.json tsconfig.seed.json ./
+COPY nest-cli.json tsconfig.json tsconfig.build.json tsconfig.database.json ./
+COPY database ./database
 COPY src ./src
 
-RUN npm run build
-
-
+RUN npm run build \
+  && npm prune --omit=dev \
+  && npm cache clean --force
 
 FROM node:20-bookworm-slim AS runtime
 
 WORKDIR /app
 
-RUN apt-get update \
-  && apt-get install -y --no-install-recommends openssl \
-  && rm -rf /var/lib/apt/lists/*
-
-RUN npm install --global npm@10.8.2 \
-  && npm --version
-
-COPY package.json package-lock.json ./
-COPY prisma ./prisma
-
-RUN npm ci --omit=dev \
-  && npx prisma generate \
-  && npm cache clean --force
-
 ENV NODE_ENV=production \
     PORT=4000 \
-    DATABASE_URL=file:/app/data/SMSdata.db \
+    DATABASE_PATH=/app/data/storage.sqlite \
     UPLOADS_DIR=/app/uploads \
-    REPORTS_DIR=/app/reports \
-    BACKUPS_DIR=/app/backups \
     CORS_ORIGIN=*
 
+COPY package.json package-lock.json ./
+COPY database/schema.sql ./database/schema.sql
+COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/dist ./dist
-COPY --from=builder /app/dist-seed ./dist-seed
+COPY --from=builder /app/dist-database ./dist-database
 COPY docker/entrypoint.sh /usr/local/bin/sms-entrypoint
 
 RUN mkdir -p /app/data /app/uploads /app/reports /app/backups \

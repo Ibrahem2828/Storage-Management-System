@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { once } from "node:events";
-import { rm, writeFile } from "node:fs/promises";
+import { rm } from "node:fs/promises";
 import { dirname, join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawn, spawnSync } from "node:child_process";
@@ -8,10 +8,10 @@ import { spawn, spawnSync } from "node:child_process";
 const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const port = 4400 + (process.pid % 500);
 const origin = `http://127.0.0.1:${port}`;
-const databasePath = join(projectRoot, "data", "smoke-test.db");
+const databasePath = join(projectRoot, "data", "smoke-test.sqlite");
 const smokeEnv = {
   ...process.env,
-  DATABASE_URL: "file:../data/smoke-test.db",
+  DATABASE_PATH: databasePath,
   PORT: String(port),
   CORS_ORIGIN: "*",
   JWT_SECRET: process.env.JWT_SECRET ?? "smoke-test-secret-only",
@@ -21,21 +21,6 @@ let server;
 let serverOutput = "";
 let serverSpawnError;
 let uploadedImagePath;
-
-function runCommand(command, args) {
-  const result = spawnSync(command, args, {
-    cwd: projectRoot,
-    env: smokeEnv,
-    encoding: "utf8",
-    shell: process.platform === "win32",
-  });
-
-  if (result.status !== 0) {
-    throw new Error(
-      `${command} ${args.join(" ")} failed\n${result.stdout}\n${result.stderr}`,
-    );
-  }
-}
 
 async function request(path, options = {}) {
   const headers = new Headers(options.headers);
@@ -151,9 +136,6 @@ async function removeSmokeArtifacts() {
 
 async function main() {
   await removeSmokeArtifacts();
-  await writeFile(databasePath, "");
-  runCommand("npx", ["prisma", "migrate", "deploy"]);
-  runCommand("npm", ["run", "seed"]);
 
   server = spawn(process.execPath, ["dist/main.js"], {
     cwd: projectRoot,
@@ -208,7 +190,10 @@ async function main() {
   const token = login.data.accessToken;
   assert.ok(token);
 
-  await request("/api/devices", { expectedStatus: 401 });
+  const unauthorized = await request("/api/devices", { expectedStatus: 401 });
+  assert.equal(unauthorized.success, false);
+  assert.equal(unauthorized.statusCode, 401);
+  assert.equal(typeof unauthorized.message, "string");
   await request("/api/auth/me", { token });
 
   const uniqueValue = `${Date.now()}-${process.pid}`;
@@ -270,12 +255,14 @@ async function main() {
   const deviceItemId = serials.data[0].id;
   assert.equal(serials.data[0].status, "AVAILABLE");
 
-  await request(`/api/devices/${deviceId}/serials`, {
+  const duplicateSerial = await request(`/api/devices/${deviceId}/serials`, {
     method: "POST",
     token,
     body: { serialNumbers: [serialNumber] },
     expectedStatus: 409,
   });
+  assert.equal(duplicateSerial.success, false);
+  assert.equal(duplicateSerial.statusCode, 409);
   await request(`/api/devices/${deviceId}/serials`, {
     method: "POST",
     token,
@@ -295,12 +282,14 @@ async function main() {
   assert.equal(firstAssignment.data.status, "ACTIVE");
   assert.equal(firstAssignment.data.deviceItem.status, "ASSIGNED");
 
-  await request("/api/assignments", {
+  const duplicateAssignment = await request("/api/assignments", {
     method: "POST",
     token,
     body: { deviceItemId, receivedBy: "Duplicate Assignment" },
     expectedStatus: 409,
   });
+  assert.equal(duplicateAssignment.success, false);
+  assert.equal(duplicateAssignment.statusCode, 409);
 
   const returnedAssignment = await request(
     `/api/assignments/${firstAssignment.data.id}/return`,
